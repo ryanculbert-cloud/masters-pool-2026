@@ -1083,9 +1083,18 @@ document.getElementById('cmConfirm').addEventListener('click', () => {
   _origSetItem('mastersLocalTeams', JSON.stringify(savedTeams.filter(t => t.owner === pendingTeamData.owner)));
   sheetsBackup(pendingTeamData);
   selectedPlayers = []; pendingTeamData = null;
+  // Reset name field too
+  const ownerInput = document.getElementById('ownerName');
+  if (ownerInput) ownerInput.value = '';
+  // Reset team name field
+  const teamNameInput = document.getElementById('teamNameInput');
+  if (teamNameInput) teamNameInput.value = '';
   // Show reminder banner to go to My Teams
-  document.getElementById('builderReminder').style.display = 'flex';
+  const reminder = document.getElementById('builderReminder');
+  if (reminder) reminder.style.display = 'flex';
   updateUI(); renderSavedTeams(); updateTeamPreview(); updatePoolPurse();
+  // Switch to My Teams tab so they can review and submit
+  switchTab('teams');
 });
 
 // ============ BUG FIX 1: E-transfer reminder uses correct ENTRY_FEE multiplier ============
@@ -1117,6 +1126,12 @@ document.getElementById('erCheckbox').addEventListener('change', e => {
 function renderSavedTeams() {
   const c = document.getElementById('submittedTeams');
   const ps = document.getElementById('paymentSummary');
+  const submitted = localStorage.getItem('mastersSubmitted') === 'true';
+  if (!savedTeams.length && submitted) {
+    c.innerHTML = '<div style="text-align:center;padding:40px 20px;background:white;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,0.06)"><div style="font-size:2.5rem;margin-bottom:12px">&#10003;</div><h3 style="font-family:'Libre Baskerville',Georgia,serif;color:var(--masters-dark);margin-bottom:8px">Teams Submitted!</h3><p style="color:var(--text-light);font-size:0.9rem">Your teams are pending payment confirmation. Once your e-transfer is received, they'll appear in the standings.</p></div>';
+    ps.style.display = 'none';
+    return;
+  }
   if (!savedTeams.length) {
     c.innerHTML = '<div class="empty-state"><div class="icon">&#9971;</div><p>No teams saved yet. Use the Team Builder to create your first entry!</p></div>';
     ps.style.display = 'none';
@@ -1187,8 +1202,7 @@ if (_finalBtn) _finalBtn.addEventListener('click', async () => {
         totalCost: team.total || team.players.reduce((s,p) => s + p.cost, 0)
       };
       const res = await fetch(SCRIPT_URL, {
-      method: 'POST', redirect: 'follow',
-       redirect: 'follow', body: JSON.stringify(payload) });
+        method: 'POST', redirect: 'follow', body: JSON.stringify(payload) });
       const text = await res.text();
       const data = JSON.parse(text);
       if (!data.ok) allOk = false;
@@ -1197,9 +1211,22 @@ if (_finalBtn) _finalBtn.addEventListener('click', async () => {
 
   btn.style.display = 'none';
   document.getElementById('finalSubmitConfirm').style.display = 'block';
-  document.getElementById('finalSubmitAmount').textContent = fmt$(savedTeams.length * ENTRY_FEE);
-  showToast('Teams submitted!');
-  // Google Sheets handles sync
+  document.getElementById('finalSubmitAmount').textContent = fmt$(localTeams.length * ENTRY_FEE);
+  showToast('Teams submitted! Awaiting payment approval.');
+
+  // Mark as submitted and clear local teams
+  // Teams are now pending in Google Sheets - won't show in standings until approved
+  localStorage.setItem('mastersSubmitted', 'true');
+  localStorage.removeItem('mastersLocalTeams');
+  localStorage.removeItem('mastersTeams');
+  savedTeams = [];
+
+  // Reset the team builder for a fresh entry
+  selectedPlayers = [];
+  editingTeamIdx = -1;
+  updateUI();
+  updateTeamPreview();
+  renderSavedTeams();
 });
 
 function renderTable() {
